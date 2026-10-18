@@ -118,8 +118,7 @@ Headings use Word's built-in Heading styles, so they appear in Word's navigation
 
 ## License
 
-Copyright (C) 2026 Binenfeld
+Copyright (C) 2026 Binenfeld. All rights reserved.
 
-This program is free software: you can redistribute it and/or modify it under the terms of the
-[GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version. It is distributed WITHOUT ANY WARRANTY; see the license for details.
+Proprietary and confidential: no one may access, use, copy, modify or distribute this software without written
+permission from Binenfeld. See [LICENSE](LICENSE).
