@@ -20,11 +20,16 @@ import java.util.Objects;
  * </pre>
  * Columns are found by their header, not their position, so columns can be added, removed or reordered.
  * Only {@value WorkerSheet#NAME_HEADER}, {@value WorkerSheet#COUNTRY_HEADER} and
- * {@value WorkerSheet#PROFESSION_HEADER} must exist. The rest are shown in the report as they are.
+ * {@value WorkerSheet#PROFESSION_HEADER} must exist. The columns in {@link #OMITTED_HEADERS} are left out, even when
+ * filled in; the rest are shown in the report as they are.
  */
 public final class WorkerParser {
     private static final List<String> REQUIRED_HEADERS =
             List.of(WorkerSheet.NAME_HEADER, WorkerSheet.COUNTRY_HEADER, WorkerSheet.PROFESSION_HEADER);
+
+    // Columns that are never part of the report. Compared without quotes, so "חוו""ד על עובד" also matches.
+    private static final List<String> OMITTED_HEADERS =
+            List.of("שפות", "רשיון נהיגה", "חווד על עובד", "היסטורית לקוחות", "האם פוטר מאיפה ולמה");
 
     // Excel starts a UTF-8 CSV with this invisible character.
     private static final String BYTE_ORDER_MARK = String.valueOf((char) 0xFEFF);
@@ -34,8 +39,8 @@ public final class WorkerParser {
 
     /**
      * Returns the sheet's header and worker rows. Rows without a name are skipped: empty rows, and rows Excel
-     * exported because a cell further down was once formatted. Columns with no header and nothing in them
-     * (Excel often exports one at the end) are dropped.
+     * exported because a cell further down was once formatted. The omitted columns are dropped, and so are columns
+     * with no header and nothing in them (Excel often exports one at the end).
      */
     public static WorkerSheet parseWorkerCsv(Path csvFile) throws IOException, UserFacingException {
         List<List<String>> records = parseCsv(readText(csvFile));
@@ -65,7 +70,7 @@ public final class WorkerParser {
             throw new UserFacingException(csvFile + " has the sheet's header but no workers (no row has a name in"
                     + " the \"" + WorkerSheet.NAME_HEADER + "\" column). Check that the right sheet was exported.");
         }
-        return dropEmptyColumns(header, rows);
+        return dropUnwantedColumns(header, rows);
     }
 
     private static String readText(Path csvFile) throws IOException, UserFacingException {
@@ -93,18 +98,26 @@ public final class WorkerParser {
         }
     }
 
-    // Drops the columns that have neither a header nor any value.
-    private static WorkerSheet dropEmptyColumns(List<String> header, List<List<String>> rows) {
+    // Drops the omitted columns, and the columns that have neither a header nor any value.
+    private static WorkerSheet dropUnwantedColumns(List<String> header, List<List<String>> rows) {
+        List<String> omitted = OMITTED_HEADERS.stream().map(WorkerParser::withoutQuotes).toList();
         List<Integer> kept = new ArrayList<>();
         for (int c = 0; c < header.size(); c++) {
             int column = c;
-            if (!header.get(c).isEmpty() || rows.stream().anyMatch(row -> !row.get(column).isEmpty())) {
+            boolean isOmitted = omitted.contains(withoutQuotes(header.get(c)));
+            boolean isEmpty = header.get(c).isEmpty() && rows.stream().allMatch(row -> row.get(column).isEmpty());
+            if (!isOmitted && !isEmpty) {
                 kept.add(c);
             }
         }
         List<String> keptHeader = kept.stream().map(header::get).toList();
         List<List<String>> keptRows = rows.stream().map(row -> kept.stream().map(row::get).toList()).toList();
         return new WorkerSheet(keptHeader, keptRows);
+    }
+
+    // A header without double or single quotes, so חוו"ד and חווד compare equal.
+    private static String withoutQuotes(String header) {
+        return header.replace("\"", "").replace("'", "");
     }
 
     // The row with exactly the given number of cells: shorter rows are filled with "", longer ones cut.

@@ -15,7 +15,7 @@ workers read `<title> - סך הכל: <amount>`.
 | Page | Section | Content |
 |---|---|---|
 | 1 | Title + date line | `פרטי עובדים לא משוייכים`, today's date and the total number of workers |
-| 1… | רשימת עובדים | The sheet as it is: every column and every worker, in the sheet's order. The header row repeats on every page |
+| 1… | רשימת עובדים | The sheet's table: every worker, in the sheet's order, with every column except the omitted ones (see below). The header row repeats on every page |
 | last | סיכום | Number of workers per country of origin and profession: countries with the most workers first, and within each country the professions with the most workers. Ends with the total row |
 
 ## Requirements
@@ -76,17 +76,19 @@ The first row is the header, and every other row is one worker. The sheet's colu
 | ארץ מוצא | Country of origin (**required**) |
 | ותק בארץ | Time in Israel (`חודש`, `חצי שנה`, `שנתיים`…) |
 | מקצוע | Profession (**required**) |
-| שפות | Languages |
-| רשיון נהיגה | Driving license |
-| חווד על עובד | Opinion on the worker |
-| היסטורית לקוחות | Client history |
-| האם פוטר מאיפה ולמה | Was the worker fired, from where and why |
+| שפות | Languages (**not in the report**) |
+| רשיון נהיגה | Driving license (**not in the report**) |
+| חווד על עובד | Opinion on the worker (**not in the report**) |
+| היסטורית לקוחות | Client history (**not in the report**) |
+| האם פוטר מאיפה ולמה | Was the worker fired, from where and why (**not in the report**) |
 
 How it is read:
 
 - **Columns are found by their header**, not their position. Only the three required columns must exist; the
   others are shown in the report as they are, so columns can be added, removed or reordered in the sheet. If a
   required column is renamed, update the header constants in `WorkerSheet`.
+- **The columns marked "not in the report" are always left out**, even when they are filled in. The list is
+  `OMITTED_HEADERS` in `WorkerParser` (quotes are ignored when comparing, so `חוו"ד` matches `חווד`).
 - **Rows without a name are left out.** That covers empty rows, and rows Excel exports with only a running
   number. A nameless row with other content is left out with a warning.
 - **Columns with no header and nothing in them are dropped** (Excel often exports an empty one at the end).
