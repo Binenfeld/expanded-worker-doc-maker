@@ -9,15 +9,15 @@ sheet.csv (exported from Excel) ──► WorkerParser ──► WorkerSheet ─
 
 ## What the report contains
 
-The report is right-to-left Hebrew on A4 pages, with colored tables. Each table is only as wide as its contents
-(a column is as wide as its longest value or header word), so the tables stay small. Headings that show a number of
-workers read `<title> - סך הכל: <amount>`.
+The report is right-to-left Hebrew on landscape A4 pages, with a 9pt table font so as much as possible fits on a
+page. The worker table fills the page width: columns with values are only as wide as their longest value or header
+word, and the empty columns share the rest of the width, so there is room to fill them in on the printout (if no
+column is empty, all columns share it).
 
 | Page | Section | Content |
 |---|---|---|
 | 1 | Title + date line | `פרטי עובדים לא משוייכים`, today's date and the total number of workers |
 | 1… | רשימת עובדים | Every worker, in the sheet's order, with the columns marked "shown" below. The header row repeats on every page |
-| last | סיכום | Number of workers per country of origin and profession: countries with the most workers first, and within each country the professions with the most workers. Ends with the total row |
 
 ## Requirements
 
@@ -93,7 +93,6 @@ How it is read:
 - **Rows without a name are left out.** That covers empty rows, and rows Excel exports with only a running
   number. A nameless row with other content is left out with a warning.
 - Cells are trimmed. A cell with several lines (Alt+Enter in Excel) keeps its line breaks in the report.
-- An empty country or profession is counted under `לא צוין` in the summary.
 
 ## Project structure
 

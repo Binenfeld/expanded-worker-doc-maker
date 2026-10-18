@@ -87,7 +87,7 @@ public final class WorkerParser {
         }
     }
 
-    // Makes sure this is the unassigned-workers sheet: the columns the summary needs must be there.
+    // Makes sure this is the unassigned-workers sheet: its main columns must be there.
     private static void checkHeader(Path csvFile, List<String> header) throws UserFacingException {
         List<String> missing = REQUIRED_HEADERS.stream().filter(h -> !header.contains(h)).toList();
         if (!missing.isEmpty()) {

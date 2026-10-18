@@ -28,13 +28,13 @@ import java.util.zip.ZipOutputStream;
 public final class DocxWriter {
     private static final String FONT = "Arial";
 
-    // A4 page in twips (1 cm = 567), and the margin on each side (1.9 cm, so wide tables fit).
+    // A4 page in twips (1 cm = 567), and the margin on each side (1.27 cm, so as much as possible fits).
     private static final int PAGE_SHORT_SIDE = 11906;
     private static final int PAGE_LONG_SIDE = 16838;
-    private static final int MARGIN = 1080;
+    private static final int MARGIN = 720;
 
-    // Table text size in half-points (20 = 10pt), a little smaller than body text so wide tables fit.
-    private static final int TABLE_FONT_SIZE = 20;
+    // Table text size in half-points (18 = 9pt), smaller than body text so as much as possible fits.
+    private static final int TABLE_FONT_SIZE = 18;
 
     // For measuring text in addFittedTable: the table font at its size in points.
     private static final Font TABLE_FONT_PLAIN = new Font(FONT, Font.PLAIN, TABLE_FONT_SIZE / 2);
@@ -162,13 +162,22 @@ public final class DocxWriter {
     /**
      * Adds a table only as wide as its contents: each column is as wide as its longest value, or the longest word
      * of its header (headers wrap between words), so short columns stay narrow. If that is wider than the page,
-     * all columns shrink in proportion and longer values wrap.
+     * only the widest columns are narrowed (their long values wrap), so short columns such as numbers stay whole.
      *
      * @param heading optional level-2 heading above the table, or null for none
      * @param footer  optional bold total row at the bottom, or null for none
      */
     public DocxWriter addFittedTable(String heading, TableColors colors, List<String> headers,
                                      List<List<String>> rows, List<String> footer) {
+        return addFittedTable(heading, colors, headers, rows, footer, List.of());
+    }
+
+    /**
+     * Same as {@link #addFittedTable(String, TableColors, List, List, List)}, but the table then fills the page
+     * width: the space left over is shared equally by the given columns (0-based), the rest keep their fitted width.
+     */
+    public DocxWriter addFittedTable(String heading, TableColors colors, List<String> headers,
+                                     List<List<String>> rows, List<String> footer, List<Integer> stretchColumns) {
         int[] widths = new int[headers.size()];
         for (int c = 0; c < widths.length; c++) {
             for (String word : headers.get(c).split("\\s+")) {
@@ -184,13 +193,41 @@ public final class DocxWriter {
             }
             widths[c] += FITTED_CELL_PADDING;
         }
-        int total = Arrays.stream(widths).sum();
+        capToWidth(widths, contentWidth);
+        int leftOver = contentWidth - Arrays.stream(widths).sum();
+        for (int i = 0; i < stretchColumns.size() && leftOver > 0; i++) {
+            // The first columns get any remainder of the division, so the total is exactly the page width.
+            int share = leftOver / stretchColumns.size() + (i < leftOver % stretchColumns.size() ? 1 : 0);
+            widths[stretchColumns.get(i)] += share;
+        }
         if (heading != null) {
             addStyledParagraph("Heading2", heading, false);
         }
-        appendTable(new Table(null, colors, headers, rows, footer, widths), Math.min(total, contentWidth));
+        appendTable(new Table(null, colors, headers, rows, footer, widths), Arrays.stream(widths).sum());
         appendSpacerParagraph();
         return this;
+    }
+
+    // If the columns are wider than maxTotal together, lowers the widest ones to a common cap, the largest cap
+    // that makes them fit. Columns narrower than the cap keep their width.
+    private static void capToWidth(int[] widths, int maxTotal) {
+        if (Arrays.stream(widths).sum() <= maxTotal) {
+            return;
+        }
+        int low = 0;
+        int high = Arrays.stream(widths).max().orElse(0);
+        while (low < high) {
+            int cap = (low + high + 1) / 2;
+            int total = Arrays.stream(widths).map(w -> Math.min(w, cap)).sum();
+            if (total <= maxTotal) {
+                low = cap;
+            } else {
+                high = cap - 1;
+            }
+        }
+        for (int c = 0; c < widths.length; c++) {
+            widths[c] = Math.min(widths[c], low);
+        }
     }
 
     // Width of one line of table text in twips, measured with the table font.
@@ -352,7 +389,7 @@ public final class DocxWriter {
             if (rightToLeft) {
                 body.append("<w:bidi/>");
             }
-            body.append("<w:spacing w:before=\"60\" w:after=\"60\" w:line=\"240\" w:lineRule=\"auto\"/>");
+            body.append("<w:spacing w:before=\"30\" w:after=\"30\" w:line=\"240\" w:lineRule=\"auto\"/>");
             if (c > 0) {
                 body.append("<w:jc w:val=\"center\"/>");
             }

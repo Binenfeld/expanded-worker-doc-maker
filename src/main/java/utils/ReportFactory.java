@@ -5,36 +5,26 @@ import utils.DocxWriter.TableColors;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.text.Collator;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 /**
- * Builds the Hebrew unassigned-workers report (.docx). Tables are only as wide as their contents, to keep them small.
+ * Builds the Hebrew unassigned-workers report (.docx), on landscape pages.
  *
  * <p>Document layout:
  * <pre>
  *   Title:      פרטי עובדים לא משוייכים
  *   Heading 1:  רשימת עובדים - סך הכל: amount
  *     Table:      the shown columns of the sheet (see WorkerParser), every worker, in the sheet's order  [blue]
- *   Heading 1:  סיכום                                                                 (new page)
- *     Heading 2:  עובדים לפי ארץ מוצא ומקצוע
- *     Table:      country | profession | number of workers, ending with the total row   [purple]
  * </pre>
+ * The table fills the page width. Columns with values are only as wide as their contents, and the empty columns share
+ * the rest, so there is room to fill them in on the printout. When no column is empty, all of them share it.
  */
 public final class ReportFactory {
     private static final String TITLE = "פרטי עובדים לא משוייכים";
-    private static final String NOT_SPECIFIED = "לא צוין";
-    private static final String WORKER_COUNT_HEADER = "מספר עובדים";
     private static final String TOTAL = "סך הכל";
-
-    // Hebrew alphabetical order (א-ת); handles spaces, punctuation and final letters properly.
-    private static final Collator HEBREW_ORDER = Collator.getInstance(Locale.of("he", "IL"));
 
     private ReportFactory() {
     }
@@ -42,12 +32,11 @@ public final class ReportFactory {
     /** Writes the report for the given sheet to {@code path}, overwriting any existing file. */
     public static void writeReport(WorkerSheet sheet, Path path) throws IOException {
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        DocxWriter doc = new DocxWriter(true)
+        DocxWriter doc = new DocxWriter(true, true)
                 .addTitle(TITLE)
                 .addParagraph("נכון לתאריך " + today + "  |  " + TOTAL + " עובדים: " + sheet.rows().size());
 
         addWorkersSection(doc, sheet);
-        addSummarySection(doc, sheet);
 
         doc.save(path);
     }
@@ -55,53 +44,21 @@ public final class ReportFactory {
     // The sheet's shown columns; the header row is repeated at the top of every page.
     private static void addWorkersSection(DocxWriter doc, WorkerSheet sheet) {
         doc.addHeading(1, withTotal("רשימת עובדים", sheet.rows().size()));
-        doc.addFittedTable(null, TableColors.BLUE, sheet.headers(), sheet.rows(), null);
+        doc.addFittedTable(null, TableColors.BLUE, sheet.headers(), sheet.rows(), null, columnsToStretch(sheet));
     }
 
-    // How many workers there are of each profession from each country. Countries with the most workers come
-    // first, and within a country, the professions with the most workers.
-    private static void addSummarySection(DocxWriter doc, WorkerSheet sheet) {
-        doc.addHeadingOnNewPage(1, "סיכום");
-
-        List<String> countries = sheet.columnValues(WorkerSheet.COUNTRY_HEADER);
-        List<String> professions = sheet.columnValues(WorkerSheet.PROFESSION_HEADER);
-        Map<String, Map<String, Integer>> countryToProfessionCounts = new LinkedHashMap<>();
-        for (int i = 0; i < countries.size(); i++) {
-            countryToProfessionCounts
-                    .computeIfAbsent(orNotSpecified(countries.get(i)), k -> new LinkedHashMap<>())
-                    .merge(orNotSpecified(professions.get(i)), 1, Integer::sum);
+    // The columns with no value in any row, or every column if none is empty.
+    private static List<Integer> columnsToStretch(WorkerSheet sheet) {
+        List<Integer> empty = new ArrayList<>();
+        List<Integer> all = new ArrayList<>();
+        for (int c = 0; c < sheet.headers().size(); c++) {
+            int column = c;
+            all.add(c);
+            if (sheet.rows().stream().allMatch(row -> row.get(column).isEmpty())) {
+                empty.add(c);
+            }
         }
-        Map<String, Integer> countryTotals = new LinkedHashMap<>();
-        countryToProfessionCounts.forEach((country, counts) -> countryTotals.put(country, sum(counts)));
-
-        List<List<String>> rows = new ArrayList<>();
-        for (String country : sortByCountDescending(countryTotals).keySet()) {
-            sortByCountDescending(countryToProfessionCounts.get(country)).forEach((profession, amount) ->
-                    rows.add(List.of(country, profession, String.valueOf(amount))));
-        }
-        doc.addFittedTable("עובדים לפי ארץ מוצא ומקצוע", TableColors.PURPLE,
-                List.of("ארץ מוצא", "מקצוע", WORKER_COUNT_HEADER), rows,
-                List.of(TOTAL, "", String.valueOf(sheet.rows().size())));
-    }
-
-    // ---------- Helpers ----------
-
-    private static String orNotSpecified(String value) {
-        return (value == null || value.isBlank()) ? NOT_SPECIFIED : value.trim();
-    }
-
-    private static int sum(Map<String, Integer> counts) {
-        return counts.values().stream().mapToInt(Integer::intValue).sum();
-    }
-
-    // Largest count first; equal counts in Hebrew alphabetical order.
-    private static Map<String, Integer> sortByCountDescending(Map<String, Integer> counts) {
-        Map<String, Integer> sorted = new LinkedHashMap<>();
-        counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
-                        .thenComparing(Map.Entry.comparingByKey(HEBREW_ORDER)))
-                .forEach(e -> sorted.put(e.getKey(), e.getValue()));
-        return sorted;
+        return empty.isEmpty() ? all : empty;
     }
 
     // "title - סך הכל: amount", used for every heading that shows a number of workers.

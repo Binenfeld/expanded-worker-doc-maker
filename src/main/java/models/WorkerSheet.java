@@ -7,7 +7,7 @@ import java.util.List;
  * Every row has exactly one cell per header; cells are trimmed and never null.
  */
 public record WorkerSheet(List<String> headers, List<List<String>> rows) {
-    // Header texts of the columns the summary needs.
+    // Header texts of the columns the sheet must have.
     public static final String NAME_HEADER = "שם מלא";
     public static final String COUNTRY_HEADER = "ארץ מוצא";
     public static final String PROFESSION_HEADER = "מקצוע";
@@ -20,15 +20,6 @@ public record WorkerSheet(List<String> headers, List<List<String>> rows) {
     /** The 0-based index of the column with this header, or -1 if the sheet has no such column. */
     public int column(String header) {
         return headers.indexOf(header);
-    }
-
-    /** The value in the given column of every row, in row order. */
-    public List<String> columnValues(String header) {
-        int column = column(header);
-        if (column < 0) {
-            throw new IllegalArgumentException("The sheet has no \"" + header + "\" column");
-        }
-        return rows.stream().map(row -> row.get(column)).toList();
     }
 
     @Override
