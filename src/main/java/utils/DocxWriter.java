@@ -1,5 +1,7 @@
 package utils;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -33,6 +35,15 @@ public final class DocxWriter {
 
     // Table text size in half-points (20 = 10pt), a little smaller than body text so wide tables fit.
     private static final int TABLE_FONT_SIZE = 20;
+
+    // For measuring text in addFittedTable: the table font at its size in points.
+    private static final Font TABLE_FONT_PLAIN = new Font(FONT, Font.PLAIN, TABLE_FONT_SIZE / 2);
+    private static final Font TABLE_FONT_BOLD = TABLE_FONT_PLAIN.deriveFont(Font.BOLD);
+    private static final FontRenderContext FONT_RENDER_CONTEXT = new FontRenderContext(null, true, true);
+
+    // Added to a fitted column's text width (twips): the cell's left and right margins (80 each), plus a little
+    // room so Word's own measuring never wraps a value that was measured to fit.
+    private static final int FITTED_CELL_PADDING = 2 * 80 + 120;
 
     // Space between the two tables of addSideBySide (twips; 1 cm = 567).
     private static final int SIDE_BY_SIDE_GAP = 400;
@@ -146,6 +157,47 @@ public final class DocxWriter {
         // Word needs a paragraph between a table and whatever follows it; keep it small.
         appendSpacerParagraph();
         return this;
+    }
+
+    /**
+     * Adds a table only as wide as its contents: each column is as wide as its longest value, or the longest word
+     * of its header (headers wrap between words), so short columns stay narrow. If that is wider than the page,
+     * all columns shrink in proportion and longer values wrap.
+     *
+     * @param heading optional level-2 heading above the table, or null for none
+     * @param footer  optional bold total row at the bottom, or null for none
+     */
+    public DocxWriter addFittedTable(String heading, TableColors colors, List<String> headers,
+                                     List<List<String>> rows, List<String> footer) {
+        int[] widths = new int[headers.size()];
+        for (int c = 0; c < widths.length; c++) {
+            for (String word : headers.get(c).split("\\s+")) {
+                widths[c] = Math.max(widths[c], textWidth(word, true));
+            }
+            for (List<String> row : rows) {
+                for (String line : row.get(c).split("\n")) {
+                    widths[c] = Math.max(widths[c], textWidth(line, false));
+                }
+            }
+            if (footer != null) {
+                widths[c] = Math.max(widths[c], textWidth(footer.get(c), true));
+            }
+            widths[c] += FITTED_CELL_PADDING;
+        }
+        int total = Arrays.stream(widths).sum();
+        if (heading != null) {
+            addStyledParagraph("Heading2", heading, false);
+        }
+        appendTable(new Table(null, colors, headers, rows, footer, widths), Math.min(total, contentWidth));
+        appendSpacerParagraph();
+        return this;
+    }
+
+    // Width of one line of table text in twips, measured with the table font.
+    private static int textWidth(String text, boolean bold) {
+        Font font = bold ? TABLE_FONT_BOLD : TABLE_FONT_PLAIN;
+        double points = font.getStringBounds(text, FONT_RENDER_CONTEXT).getWidth();
+        return (int) Math.ceil(points * 20); // 20 twips per point
     }
 
     /**

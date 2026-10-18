@@ -9,13 +9,14 @@ sheet.csv (exported from Excel) ──► WorkerParser ──► WorkerSheet ─
 
 ## What the report contains
 
-The report is right-to-left Hebrew on landscape A4 pages, with colored tables. Headings that show a number of
+The report is right-to-left Hebrew on A4 pages, with colored tables. Each table is only as wide as its contents
+(a column is as wide as its longest value or header word), so the tables stay small. Headings that show a number of
 workers read `<title> - סך הכל: <amount>`.
 
 | Page | Section | Content |
 |---|---|---|
 | 1 | Title + date line | `פרטי עובדים לא משוייכים`, today's date and the total number of workers |
-| 1… | רשימת עובדים | The sheet's table: every worker, in the sheet's order, with every column except the omitted ones (see below). The header row repeats on every page |
+| 1… | רשימת עובדים | Every worker, in the sheet's order, with the columns marked "shown" below. The header row repeats on every page |
 | last | סיכום | Number of workers per country of origin and profession: countries with the most workers first, and within each country the professions with the most workers. Ends with the total row |
 
 ## Requirements
@@ -69,29 +70,28 @@ The first row is the header, and every other row is one worker. The sheet's colu
 
 | Header | Meaning |
 |---|---|
-| מסד | Running number |
-| מספר עובד | Worker ID |
-| שם מלא | Full name (**required**) |
-| מספר דרכון | Passport number |
-| ארץ מוצא | Country of origin (**required**) |
-| ותק בארץ | Time in Israel (`חודש`, `חצי שנה`, `שנתיים`…) |
-| מקצוע | Profession (**required**) |
-| שפות | Languages (**not in the report**) |
-| רשיון נהיגה | Driving license (**not in the report**) |
-| חווד על עובד | Opinion on the worker (**not in the report**) |
-| היסטורית לקוחות | Client history (**not in the report**) |
-| האם פוטר מאיפה ולמה | Was the worker fired, from where and why (**not in the report**) |
+| מסד | Running number (**shown**) |
+| מספר עובד | Worker ID (not shown) |
+| שם מלא | Full name (**required**; not shown, but tells workers from empty rows) |
+| מספר דרכון | Passport number (**shown**) |
+| ארץ מוצא | Country of origin (**required, shown**) |
+| ותק בארץ | Time in Israel (`חודש`, `חצי שנה`, `שנתיים`…) (**shown**) |
+| מקצוע | Profession (**required, shown**) |
+| שפות | Languages (**shown**, usually empty) |
+| רשיון נהיגה | Driving license (**shown**, usually empty) |
+| חווד על עובד | Opinion on the worker (**shown**, usually empty) |
+| היסטורית לקוחות | Client history (**shown**, usually empty) |
+| האם פוטר מאיפה ולמה | Was the worker fired, from where and why (**shown**, usually empty) |
 
 How it is read:
 
-- **Columns are found by their header**, not their position. Only the three required columns must exist; the
-  others are shown in the report as they are, so columns can be added, removed or reordered in the sheet. If a
-  required column is renamed, update the header constants in `WorkerSheet`.
-- **The columns marked "not in the report" are always left out**, even when they are filled in. The list is
-  `OMITTED_HEADERS` in `WorkerParser` (quotes are ignored when comparing, so `חוו"ד` matches `חווד`).
+- **Columns are found by their header**, not their position, so they can be reordered and new ones added. Only
+  the three required columns must exist. If one of them is renamed, update the header constants in `WorkerSheet`.
+- **Only the columns marked "shown" are in the report**, in the sheet's order; any other column is left out, even
+  when filled in. The list is `SHOWN_HEADERS` in `WorkerParser` (quotes are ignored when comparing, so `חוו"ד`
+  matches `חווד`). A shown column missing from the sheet is left out with a warning.
 - **Rows without a name are left out.** That covers empty rows, and rows Excel exports with only a running
   number. A nameless row with other content is left out with a warning.
-- **Columns with no header and nothing in them are dropped** (Excel often exports an empty one at the end).
 - Cells are trimmed. A cell with several lines (Alt+Enter in Excel) keeps its line breaks in the report.
 - An empty country or profession is counted under `לא צוין` in the summary.
 
@@ -109,7 +109,7 @@ src/main/java/
 └── utils/
     ├── WorkerParser.java     reads the CSV into a WorkerSheet
     ├── ReportFactory.java    lays out the report (sections, tables, counting, sorting)
-    ├── DocxWriter.java       minimal .docx writer (titles, headings, RTL, landscape, colored tables) without libraries
+    ├── DocxWriter.java       minimal .docx writer (titles, headings, RTL, landscape, colored and fitted tables) without libraries
     ├── PdfConverter.java     .docx → PDF through Word (PowerShell + COM); always closes the Word it starts
     ├── UserFacingException.java  a problem the user can fix; Main prints its message without a stack trace
     └── FileIOHandler.java    small UTF-8 file helpers

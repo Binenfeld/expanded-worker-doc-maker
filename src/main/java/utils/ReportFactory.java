@@ -1,7 +1,6 @@
 package utils;
 
 import models.WorkerSheet;
-import utils.DocxWriter.Table;
 import utils.DocxWriter.TableColors;
 
 import java.io.IOException;
@@ -16,16 +15,16 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Builds the Hebrew unassigned-workers report (.docx), on landscape pages so the sheet's many columns fit.
+ * Builds the Hebrew unassigned-workers report (.docx). Tables are only as wide as their contents, to keep them small.
  *
  * <p>Document layout:
  * <pre>
  *   Title:      פרטי עובדים לא משוייכים
  *   Heading 1:  רשימת עובדים - סך הכל: amount
- *     Table:      the sheet as it is: every column, every worker, in the sheet's order          [blue]
+ *     Table:      the shown columns of the sheet (see WorkerParser), every worker, in the sheet's order  [blue]
  *   Heading 1:  סיכום                                                                 (new page)
  *     Heading 2:  עובדים לפי ארץ מוצא ומקצוע
- *     Table:      country | profession | number of workers, ending with the total row  [purple] (right half)
+ *     Table:      country | profession | number of workers, ending with the total row   [purple]
  * </pre>
  */
 public final class ReportFactory {
@@ -33,11 +32,6 @@ public final class ReportFactory {
     private static final String NOT_SPECIFIED = "לא צוין";
     private static final String WORKER_COUNT_HEADER = "מספר עובדים";
     private static final String TOTAL = "סך הכל";
-
-    // Column widths of the worker table follow the longest text in each column, within these bounds
-    // (in characters), so empty columns stay readable and long names don't squeeze the rest.
-    private static final int MIN_COLUMN_WEIGHT = 6;
-    private static final int MAX_COLUMN_WEIGHT = 24;
 
     // Hebrew alphabetical order (א-ת); handles spaces, punctuation and final letters properly.
     private static final Collator HEBREW_ORDER = Collator.getInstance(Locale.of("he", "IL"));
@@ -48,7 +42,7 @@ public final class ReportFactory {
     /** Writes the report for the given sheet to {@code path}, overwriting any existing file. */
     public static void writeReport(WorkerSheet sheet, Path path) throws IOException {
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        DocxWriter doc = new DocxWriter(true, true)
+        DocxWriter doc = new DocxWriter(true)
                 .addTitle(TITLE)
                 .addParagraph("נכון לתאריך " + today + "  |  " + TOTAL + " עובדים: " + sheet.rows().size());
 
@@ -58,10 +52,10 @@ public final class ReportFactory {
         doc.save(path);
     }
 
-    // The sheet itself, unchanged: the header row is repeated at the top of every page.
+    // The sheet's shown columns; the header row is repeated at the top of every page.
     private static void addWorkersSection(DocxWriter doc, WorkerSheet sheet) {
         doc.addHeading(1, withTotal("רשימת עובדים", sheet.rows().size()));
-        doc.addTable(TableColors.BLUE, sheet.headers(), sheet.rows(), null, columnWeights(sheet));
+        doc.addFittedTable(null, TableColors.BLUE, sheet.headers(), sheet.rows(), null);
     }
 
     // How many workers there are of each profession from each country. Countries with the most workers come
@@ -85,32 +79,12 @@ public final class ReportFactory {
             sortByCountDescending(countryToProfessionCounts.get(country)).forEach((profession, amount) ->
                     rows.add(List.of(country, profession, String.valueOf(amount))));
         }
-        Table table = new Table("עובדים לפי ארץ מוצא ומקצוע", TableColors.PURPLE,
+        doc.addFittedTable("עובדים לפי ארץ מוצא ומקצוע", TableColors.PURPLE,
                 List.of("ארץ מוצא", "מקצוע", WORKER_COUNT_HEADER), rows,
-                List.of(TOTAL, "", String.valueOf(sheet.rows().size())), 3, 4, 2);
-        doc.addSideBySide(table, null);
+                List.of(TOTAL, "", String.valueOf(sheet.rows().size())));
     }
 
     // ---------- Helpers ----------
-
-    // One weight per column: the length of its longest value or header word, kept within the bounds.
-    private static int[] columnWeights(WorkerSheet sheet) {
-        int[] weights = new int[sheet.headers().size()];
-        for (int c = 0; c < weights.length; c++) {
-            int longest = 0;
-            // A header can wrap between words, so only its longest word must fit.
-            for (String word : sheet.headers().get(c).split("\\s+")) {
-                longest = Math.max(longest, word.length());
-            }
-            for (List<String> row : sheet.rows()) {
-                for (String line : row.get(c).split("\n")) {
-                    longest = Math.max(longest, line.length());
-                }
-            }
-            weights[c] = Math.clamp(longest, MIN_COLUMN_WEIGHT, MAX_COLUMN_WEIGHT);
-        }
-        return weights;
-    }
 
     private static String orNotSpecified(String value) {
         return (value == null || value.isBlank()) ? NOT_SPECIFIED : value.trim();

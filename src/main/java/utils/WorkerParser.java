@@ -18,18 +18,20 @@ import java.util.Objects;
  *   מסד | מספר עובד | שם מלא | מספר דרכון | ארץ מוצא | ותק בארץ | מקצוע | שפות | רשיון נהיגה |
  *   חווד על עובד | היסטורית לקוחות | האם פוטר מאיפה ולמה
  * </pre>
- * Columns are found by their header, not their position, so columns can be added, removed or reordered.
+ * Columns are found by their header, not their position, so they can be reordered and others can be added.
  * Only {@value WorkerSheet#NAME_HEADER}, {@value WorkerSheet#COUNTRY_HEADER} and
- * {@value WorkerSheet#PROFESSION_HEADER} must exist. The columns in {@link #OMITTED_HEADERS} are left out, even when
- * filled in; the rest are shown in the report as they are.
+ * {@value WorkerSheet#PROFESSION_HEADER} must exist. Only the columns in {@link #SHOWN_HEADERS} are kept for the
+ * report, in the sheet's order; the name is used to tell workers from empty rows, but is not shown.
  */
 public final class WorkerParser {
     private static final List<String> REQUIRED_HEADERS =
             List.of(WorkerSheet.NAME_HEADER, WorkerSheet.COUNTRY_HEADER, WorkerSheet.PROFESSION_HEADER);
 
-    // Columns that are never part of the report. Compared without quotes, so "חוו""ד על עובד" also matches.
-    private static final List<String> OMITTED_HEADERS =
-            List.of("שפות", "רשיון נהיגה", "חווד על עובד", "היסטורית לקוחות", "האם פוטר מאיפה ולמה");
+    // The columns shown in the report; any other column is left out, even when filled in.
+    // Compared without quotes, so "חוו""ד על עובד" also matches.
+    private static final List<String> SHOWN_HEADERS = List.of("מסד", "מספר דרכון", WorkerSheet.COUNTRY_HEADER,
+            "ותק בארץ", WorkerSheet.PROFESSION_HEADER, "שפות", "רשיון נהיגה", "חווד על עובד", "היסטורית לקוחות",
+            "האם פוטר מאיפה ולמה");
 
     // Excel starts a UTF-8 CSV with this invisible character.
     private static final String BYTE_ORDER_MARK = String.valueOf((char) 0xFEFF);
@@ -39,8 +41,7 @@ public final class WorkerParser {
 
     /**
      * Returns the sheet's header and worker rows. Rows without a name are skipped: empty rows, and rows Excel
-     * exported because a cell further down was once formatted. The omitted columns are dropped, and so are columns
-     * with no header and nothing in them (Excel often exports one at the end).
+     * exported because a cell further down was once formatted. Only the shown columns are kept.
      */
     public static WorkerSheet parseWorkerCsv(Path csvFile) throws IOException, UserFacingException {
         List<List<String>> records = parseCsv(readText(csvFile));
@@ -70,7 +71,7 @@ public final class WorkerParser {
             throw new UserFacingException(csvFile + " has the sheet's header but no workers (no row has a name in"
                     + " the \"" + WorkerSheet.NAME_HEADER + "\" column). Check that the right sheet was exported.");
         }
-        return dropUnwantedColumns(header, rows);
+        return keepShownColumns(header, rows);
     }
 
     private static String readText(Path csvFile) throws IOException, UserFacingException {
@@ -98,15 +99,19 @@ public final class WorkerParser {
         }
     }
 
-    // Drops the omitted columns, and the columns that have neither a header nor any value.
-    private static WorkerSheet dropUnwantedColumns(List<String> header, List<List<String>> rows) {
-        List<String> omitted = OMITTED_HEADERS.stream().map(WorkerParser::withoutQuotes).toList();
+    // Keeps only the shown columns, in the sheet's order. A shown column missing from the sheet gets a warning.
+    private static WorkerSheet keepShownColumns(List<String> header, List<List<String>> rows) {
+        List<String> shown = SHOWN_HEADERS.stream().map(WorkerParser::withoutQuotes).toList();
+        List<String> found = header.stream().map(WorkerParser::withoutQuotes).toList();
+        for (int i = 0; i < shown.size(); i++) {
+            if (!found.contains(shown.get(i))) {
+                System.out.println("Warning: the sheet has no \"" + SHOWN_HEADERS.get(i) + "\" column, so the report"
+                        + " leaves it out. If it was renamed, update SHOWN_HEADERS in WorkerParser.");
+            }
+        }
         List<Integer> kept = new ArrayList<>();
         for (int c = 0; c < header.size(); c++) {
-            int column = c;
-            boolean isOmitted = omitted.contains(withoutQuotes(header.get(c)));
-            boolean isEmpty = header.get(c).isEmpty() && rows.stream().allMatch(row -> row.get(column).isEmpty());
-            if (!isOmitted && !isEmpty) {
+            if (shown.contains(found.get(c))) {
                 kept.add(c);
             }
         }
